@@ -1,0 +1,17 @@
+version: '3.8' # Đây là phiên bản của Docker Compose, giống như version của Windows vậy.
+services: # Danh sách các "nhân viên" (container) em muốn thuê.
+  postgres: # Tên dịch vụ, em đặt là 'postgres' cho dễ nhớ.
+    image: postgres:15-alpine # 'postgres' là tên phần mềm, '15' là phiên bản, 'alpine' là bản siêu nhẹ để tải cho nhanh.
+    container_name: food-store-db # Đặt tên cho cái thùng này để mình dễ quản lý trong Docker Desktop.
+    restart: always # Nếu máy tính bị sập nguồn, khi bật lại Docker sẽ tự động chạy cái thùng này cho em.
+    environment: # Các biến môi trường - giống như cài đặt mật khẩu cho két sắt.
+      POSTGRES_USER: admin # Tên đăng nhập vào Database.
+      POSTGRES_PASSWORD: 123 # Mật khẩu (em đặt đơn giản để học cho dễ).
+      POSTGRES_DB: food_db # Tên của cái "túi" chứa dữ liệu bên trong Postgres.
+    ports:
+      - "5432:5432" # Máy tính của em (cổng 5432) thông với cái thùng (cổng 5432). Không có dòng này, code của em không chui vào thùng được.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # "Cái túi thần kỳ". Dữ liệu sẽ được đồng bộ ra máy thật của em. Xóa cái thùng đi dữ liệu vẫn còn.
+
+volumes: # Khai báo nơi lưu trữ dữ liệu bền vững.
+  postgres_data:
