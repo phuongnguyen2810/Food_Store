@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable prettier/prettier */
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client'; // Import PrismaClient từ thư mục generated
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 

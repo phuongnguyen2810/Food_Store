@@ -1,26 +1,209 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-model Product {
-  id          Int     @id @default(autoincrement())
-  name        String
-  description String?
-  price       Float
-  image       String?
+// ==========================================
+// 1. CÁC KIỂU DỮ LIỆU LIỆT KÊ (ENUMS)
+// ==========================================
+enum Role {
+  USER
+  ADMIN
 }
 
+enum AuthProvider {
+  LOCAL   // Đăng ký bằng Email/Pass bình thường
+  GOOGLE
+  GITHUB
+}
+
+enum OrderStatus {
+  PENDING     // Đang chờ duyệt
+  PREPARING   // Đang chuẩn bị món
+  SHIPPING    // Đang giao hàng
+  DELIVERED   // Đã giao xong
+  CANCELLED   // Đã hủy
+}
+
+enum PaymentMethod {
+  COD       // Thanh toán khi nhận hàng
+  VNPAY     // Thanh toán VNPay
+  MOMO      // Thanh toán Momo
+}
+
+enum PaymentStatus {
+  PENDING   // Chưa thanh toán
+  PAID      // Đã thanh toán thành công
+  FAILED    // Thanh toán lỗi/thất bại
+}
+
+enum BookingStatus {
+  PENDING   // Đang chờ xếp bàn
+  CONFIRMED // Đã xác nhận giữ bàn
+  COMPLETED // Khách đã đến ăn xong
+  CANCELLED // Đã hủy bàn
+}
+
+// ==========================================
+// 2. CÁC BẢNG DỮ LIỆU CHÍNH (MODELS)
+// ==========================================
+
+// --- BẢNG NGƯỜI DÙNG ---
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id            String       @id @default(uuid())
+  email         String       @unique
+  password      String?      // Bỏ trống nếu đăng nhập bằng Google/Github
+  name          String?
+  avatar        String?      // Link ảnh đại diện
+  address       String?      // Địa chỉ giao hàng mặc định
+  phoneNumber   String?
+  
+  // Phục vụ tính năng Đăng nhập NextAuth (Google/Github)
+  provider      AuthProvider @default(LOCAL)
+  providerId    String?      // ID trả về từ Google/Github
+
+  role          Role         @default(USER)
+  
+  // Các mối quan hệ (Dây nối)
+  orders        Order[]
+  reviews       Review[]
+  bookings      Booking[]
+  cart          Cart?
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Đảm bảo không trùng lặp tài khoản mxh
+  @@unique([provider, providerId])
+}
+
+// --- BẢNG DANH MỤC ---
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  imageUrl    String?
+  
+  products    Product[]
+}
+
+// --- BẢNG MÓN ĂN ---
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Int
+  imageUrl    String?
+  isAvailable Boolean  @default(true) // Admin có thể ẩn món nếu hết đồ nấu
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- BẢNG ĐƠN HÀNG (Bán mang về/Giao tận nơi) ---
+model Order {
+  id              String        @id @default(uuid())
+  totalAmount     Int
+  status          OrderStatus   @default(PENDING)
+  
+  // Chi tiết giao hàng
+  shippingAddress String
+  deliveryDate    DateTime?     // Ngày giờ dự kiến giao tới
+  note            String?       // Lời nhắn (VD: ít cay, nhiều hành)
+
+  // Chi tiết thanh toán (Chuẩn bị cho VNPay/Momo)
+  paymentMethod   PaymentMethod @default(COD)
+  paymentStatus   PaymentStatus @default(PENDING)
+  transactionId   String?       // Mã GD từ VNPay/Momo trả về để đối soát
+
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  
+  orderItems      OrderItem[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+// --- BẢNG CHI TIẾT ĐƠN HÀNG ---
+model OrderItem {
+  id        String  @id @default(uuid())
+  quantity  Int
+  price     Int     // Phải lưu giá lúc mua, phòng khi admin đổi giá món trên menu
+  
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// --- BẢNG ĐẶT BÁN (Booking - Dành cho Admin quản lý) ---
+model Booking {
+  id             String        @id @default(uuid())
+  bookingDate    DateTime      // Ngày đặt
+  bookingTime    String        // Giờ đặt (VD: "18:30")
+  numberOfGuests Int           // Số lượng người
+  status         BookingStatus @default(PENDING)
+  note           String?       // Yêu cầu đặc biệt (VD: Bàn gần cửa sổ)
+
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// --- BẢNG ĐÁNH GIÁ (Review) ---
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int      // Số sao đánh giá (sẽ validate từ 1-5 ở code Backend)
+  comment   String?  // Nội dung đánh giá
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// --- BẢNG GIỎ HÀNG (Lưu tạm món trước khi thanh toán) ---
+model Cart {
+  id        String     @id @default(uuid())
+  
+  userId    String     @unique // Mỗi User chỉ có đúng 1 giỏ hàng duy nhất
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  cartItems CartItem[]
+
+  createdAt DateTime   @default(now())
+}
+
+// --- BẢNG CHI TIẾT GIỎ HÀNG (Các món đang nằm trong giỏ) ---
+model CartItem {
+  id        String   @id @default(uuid())
+  quantity  Int      // Số lượng món muốn mua
+  
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  
+  // Tránh việc khách thêm cùng 1 món nhiều lần tạo ra nhiều dòng
+  @@unique([cartId, productId]) 
 }
